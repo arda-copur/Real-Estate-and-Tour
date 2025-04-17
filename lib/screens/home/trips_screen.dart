@@ -18,7 +18,7 @@ class TripsScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'Yaklaşan'),
               Tab(text: 'Geçmiş'),
-              Tab(text: 'İptal Edilen'),
+              Tab(text: 'Reddilen'),
             ],
           ),
         ),

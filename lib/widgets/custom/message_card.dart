@@ -22,21 +22,32 @@ class MessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
+          color: unread ? Colors.blue.shade50 : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          color: unread ? const Color(0xFFF7F7F7) : Colors.white,
-          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CircleAvatar(
               radius: 24,
-              backgroundImage: AssetImage(hostImage),
+              backgroundColor: Colors.grey.shade300,
+              backgroundImage: hostImage.startsWith('assets/')
+                  ? AssetImage(hostImage)
+                  : NetworkImage(hostImage) as ImageProvider,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -44,20 +55,20 @@ class MessageCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         hostName,
-                        style: const TextStyle(
+                        style: TextStyle(
+                          fontWeight: unread ? FontWeight.bold : FontWeight.w500,
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const Spacer(),
                       Text(
                         time,
                         style: TextStyle(
-                          fontSize: 14,
-                          color: unread ? Colors.black : Colors.grey,
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -65,17 +76,19 @@ class MessageCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     propertyName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                    style: TextStyle(
+                      fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+                      color: Colors.grey.shade800,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     lastMessage,
                     style: TextStyle(
-                      fontSize: 14,
-                      color: unread ? Colors.black : Colors.grey,
+                      color: unread ? Colors.black87 : Colors.grey.shade600,
+                      fontWeight: unread ? FontWeight.w500 : FontWeight.normal,
+                      fontSize: 13,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -83,6 +96,18 @@ class MessageCard extends StatelessWidget {
                 ],
               ),
             ),
+            if (unread)
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: const BoxDecoration(
+                    color: Colors.blue,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
           ],
         ),
       ),

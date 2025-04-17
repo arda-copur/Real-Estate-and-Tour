@@ -10,6 +10,9 @@ import 'package:estate/screens/profile/user_profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/experience.dart';
+import 'package:intl/intl.dart';
+import 'package:estate/models/booking_model.dart';
+import 'package:estate/services/booking_service.dart';
 
 class ExperienceDetailScreen extends StatefulWidget {
   final String experienceId;
@@ -303,6 +306,465 @@ class _ExperienceDetailScreenState extends State<ExperienceDetailScreen> {
           ),
         );
       }
+    }
+  }
+
+  // Rezervasyon butonunu göster
+  Widget _buildReserveButton() {
+    if (_experience == null) return Container();
+
+    // Kullanıcı girişi yapılmamışsa, rezervasyon yapmak için giriş yapma düğmesi göster
+    final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    if (currentUser == null) {
+      return ElevatedButton(
+        onPressed: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Rezervasyon yapmak için giriş yapmalısınız'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          Navigator.pushNamed(context, '/login');
+        },
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 12,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: const Text(
+          'Rezervasyon için Giriş Yap',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
+    // Kullanıcının kendi deneyimi ise, rezervasyon düğmesini gösterme
+    String hostId = "";
+    if (_experienceData != null && _experienceData!['host'] != null) {
+      if (_experienceData!['host'] is Map && _experienceData!['host']['_id'] != null) {
+        hostId = _experienceData!['host']['_id'].toString();
+      } else if (_experienceData!['host'] is String) {
+        hostId = _experienceData!['host'];
+      }
+    }
+
+    if (hostId.isNotEmpty && currentUser.id == hostId) {
+      return Container();
+    }
+
+    return ElevatedButton(
+      onPressed: _showBookingModal,
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: 12,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      child: const Text(
+        'Rezervasyon Yap',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  // Max misafir sayısını deneyimden almaya çalış veya varsayılan değer kullan
+  int _getMaxGuests() {
+    if (_experienceData != null && _experienceData!.containsKey('maxGuests')) {
+      return _experienceData!['maxGuests'] ?? 10;
+    }
+    return 10; // Varsayılan değer
+  }
+
+  void _showBookingModal() {
+    if (_experience == null) return;
+
+    final now = DateTime.now();
+    final tomorrow = now.add(const Duration(days: 1));
+
+    DateTime? selectedDate = tomorrow;
+    Map<String, String> timeSlot = {'startTime': '10:00', 'endTime': '12:00'};
+    int guestCount = 1;
+    String? notes;
+
+    // Max misafir sayısını al
+    int maxGuests = _getMaxGuests();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Deneyim Rezervasyonu',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Tarih seçimi
+                    Text(
+                      'Tarih',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate ?? tomorrow,
+                          firstDate: tomorrow,
+                          lastDate: DateTime(now.year + 2),
+                        );
+                        if (date != null) {
+                          setState(() {
+                            selectedDate = date;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              selectedDate != null
+                                  ? DateFormat('dd.MM.yyyy').format(selectedDate!)
+                                  : 'Tarih seçin',
+                            ),
+                            const Icon(Icons.calendar_today),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Saat aralığı
+                    Text(
+                      'Saat Aralığı',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay(
+                                  hour: int.parse(timeSlot['startTime']!.split(':')[0]),
+                                  minute: int.parse(timeSlot['startTime']!.split(':')[1]),
+                                ),
+                              );
+                              if (time != null) {
+                                setState(() {
+                                  timeSlot['startTime'] = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(timeSlot['startTime'] ?? '10:00'),
+                                  const Icon(Icons.access_time),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Text(' - '),
+                        ),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay(
+                                  hour: int.parse(timeSlot['endTime']!.split(':')[0]),
+                                  minute: int.parse(timeSlot['endTime']!.split(':')[1]),
+                                ),
+                              );
+                              if (time != null) {
+                                setState(() {
+                                  timeSlot['endTime'] = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+                                });
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(timeSlot['endTime'] ?? '12:00'),
+                                  const Icon(Icons.access_time),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Misafir sayısı
+                    Text(
+                      'Misafir Sayısı',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              if (guestCount > 1) guestCount--;
+                            });
+                          },
+                          icon: const Icon(Icons.remove),
+                        ),
+                        Text(
+                          guestCount.toString(),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              if (guestCount < maxGuests) guestCount++;
+                            });
+                          },
+                          icon: const Icon(Icons.add),
+                        ),
+                        Text('(Max: $maxGuests kişi)'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Notlar
+                    Text(
+                      'Notlar (Opsiyonel)',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Organizatöre iletmek istediğiniz notlar...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      maxLines: 3,
+                      onChanged: (value) {
+                        notes = value;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    // Fiyat hesaplama
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Kişi başı fiyat:',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        Text(
+                          _experience!.price,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Misafir sayısı:',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        Text(
+                          '$guestCount kişi',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Toplam tutar:',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                        Text(
+                          _calculateTotalPrice(guestCount),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          if (selectedDate != null) {
+                            _makeReservation(selectedDate!, timeSlot, guestCount, notes);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Lütfen tarih seçin'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Rezervasyon Talebini Gönder'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _calculateTotalPrice(int guestCount) {
+    if (_experience == null) return '0 ₺';
+    
+    final priceString = _experience!.price.replaceAll(RegExp(r'[^0-9]'), '');
+    if (priceString.isEmpty) return '0 ₺';
+    
+    final pricePerPerson = int.tryParse(priceString) ?? 0;
+    final totalPrice = pricePerPerson * guestCount;
+    
+    return '$totalPrice ₺';
+  }
+
+  Future<void> _makeReservation(
+    DateTime selectedDate,
+    Map<String, String> timeSlot,
+    int guestCount,
+    String? notes,
+  ) async {
+    if (_experience == null) return;
+
+    // Yükleniyor göster
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final bookingService = BookingService();
+      await bookingService.createExperienceBooking(
+        experienceId: _experience!.id,
+        startDate: selectedDate.toIso8601String(),
+        timeSlot: timeSlot,
+        guestCount: guestCount,
+        notes: notes,
+      );
+
+      // Dialog kapat
+      Navigator.pop(context);
+      // Modal kapat
+      Navigator.pop(context);
+
+      // Başarı mesajı göster
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rezervasyon talebiniz gönderildi'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // Dialog kapat
+      Navigator.pop(context);
+      
+      // Hata mesajı göster
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Rezervasyon oluşturulurken bir hata oluştu: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -603,33 +1065,7 @@ class _ExperienceDetailScreenState extends State<ExperienceDetailScreen> {
                         ],
                       ),
                       const Spacer(),
-                      ElevatedButton(
-                        onPressed: () {
-                          // Rezervasyon işlemi
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Deneyim rezervasyonunuz alındı!'),
-                              backgroundColor: Color(0xFFFF5A5F),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text(
-                          'Rezervasyon yap',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      _buildReserveButton(),
                     ],
                   ),
                 ],

@@ -10,6 +10,9 @@ import 'package:provider/provider.dart';
 import '../../widgets/custom/image_carousel.dart';
 import '../../widgets/profile/host_profile.dart';
 import '../../models/property.dart';
+import 'package:intl/intl.dart';
+import 'package:estate/models/booking_model.dart';
+import 'package:estate/services/booking_service.dart';
 
 class PropertyDetailScreen extends StatefulWidget {
   final String propertyId;
@@ -411,6 +414,460 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     }
   }
 
+  // Rezervasyon butonunu göster
+  Widget _buildReserveButton() {
+    if (_property == null) return Container();
+
+    // Kullanıcı girişi yapılmamışsa, rezervasyon yapmak için giriş yapma düğmesi göster
+    final currentUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
+    if (currentUser == null) {
+      return ElevatedButton(
+        onPressed: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Rezervasyon yapmak için giriş yapmalısınız'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          Navigator.pushNamed(context, '/login');
+        },
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 12,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: const Text(
+          'Rezervasyon için Giriş Yap',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
+    // Kullanıcının kendi mülkü ise, rezervasyon düğmesini gösterme
+    String hostId = "";
+    if (_propertyData != null && _propertyData!['host'] != null) {
+      if (_propertyData!['host'] is Map && _propertyData!['host']['_id'] != null) {
+        hostId = _propertyData!['host']['_id'].toString();
+      } else if (_propertyData!['host'] is String) {
+        hostId = _propertyData!['host'];
+      }
+    }
+
+    if (hostId.isNotEmpty && currentUser.id == hostId) {
+      return Container();
+    }
+
+    return ElevatedButton(
+      onPressed: _showBookingModal,
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: 12,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      child: const Text(
+        'Rezervasyon Yap',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  void _showBookingModal() {
+    if (_property == null) return;
+
+    final now = DateTime.now();
+    final tomorrow = now.add(const Duration(days: 1));
+    final nextWeek = now.add(const Duration(days: 8));
+
+    DateTime? checkInDate = tomorrow;
+    DateTime? checkOutDate = nextWeek;
+    int guestCount = 1;
+    String? notes;
+
+    int maxGuests = 2;
+    for (var amenity in _property!.amenities) {
+      if (amenity.toLowerCase().contains('misafir') || amenity.toLowerCase().contains('guest')) {
+        var countStr = amenity.replaceAll(RegExp(r'[^0-9]'), '');
+        if (countStr.isNotEmpty) {
+          maxGuests = int.tryParse(countStr) ?? 2;
+        }
+      }
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Rezervasyon',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Giriş tarihi
+                    Text(
+                      'Giriş Tarihi',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: checkInDate ?? tomorrow,
+                          firstDate: tomorrow,
+                          lastDate: DateTime(now.year + 1),
+                        );
+                        if (date != null) {
+                          setState(() {
+                            checkInDate = date;
+                            // Eğer çıkış tarihi giriş tarihinden önce ise, çıkış tarihini güncelle
+                            if (checkOutDate != null && checkOutDate!.isBefore(date)) {
+                              checkOutDate = date.add(const Duration(days: 1));
+                            }
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              checkInDate != null
+                                  ? DateFormat('dd.MM.yyyy').format(checkInDate!)
+                                  : 'Tarih seçin',
+                            ),
+                            const Icon(Icons.calendar_today),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Çıkış tarihi
+                    Text(
+                      'Çıkış Tarihi',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: checkOutDate ?? nextWeek,
+                          firstDate: checkInDate?.add(const Duration(days: 1)) ?? tomorrow.add(const Duration(days: 1)),
+                          lastDate: DateTime(now.year + 2),
+                        );
+                        if (date != null) {
+                          setState(() {
+                            checkOutDate = date;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              checkOutDate != null
+                                  ? DateFormat('dd.MM.yyyy').format(checkOutDate!)
+                                  : 'Tarih seçin',
+                            ),
+                            const Icon(Icons.calendar_today),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Misafir sayısı
+                    Text(
+                      'Misafir Sayısı',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              if (guestCount > 1) guestCount--;
+                            });
+                          },
+                          icon: const Icon(Icons.remove),
+                        ),
+                        Text(
+                          guestCount.toString(),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              if (guestCount < maxGuests) guestCount++;
+                            });
+                          },
+                          icon: const Icon(Icons.add),
+                        ),
+                        Text('(Max: $maxGuests kişi)'),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Notlar
+                    Text(
+                      'Notlar (Opsiyonel)',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Ev sahibine iletmek istediğiniz notlar...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      maxLines: 3,
+                      onChanged: (value) {
+                        notes = value;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    // Fiyat hesaplama
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Gecelik fiyat:',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        Text(
+                          _property!.price,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Kalış süresi:',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        Text(
+                          checkInDate != null && checkOutDate != null
+                              ? '${checkOutDate!.difference(checkInDate!).inDays} gece'
+                              : '0 gece',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Misafir sayısı:',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        Text(
+                          '$guestCount kişi',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Toplam tutar:',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                        Text(
+                          checkInDate != null && checkOutDate != null
+                              ? '${_calculateTotalPrice(checkInDate!, checkOutDate!)} ₺'
+                              : '0 ₺',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          if (checkInDate != null && checkOutDate != null) {
+                            _makeReservation(
+                              checkInDate!,
+                              checkOutDate!,
+                              guestCount,
+                              notes,
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Lütfen giriş ve çıkış tarihlerini seçin'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('Rezervasyon Yap'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  int _calculateTotalPrice(DateTime checkIn, DateTime checkOut) {
+    if (_property == null) return 0;
+    
+    final dayDiff = checkOut.difference(checkIn).inDays;
+    final priceString = _property!.price.replaceAll(RegExp(r'[^0-9]'), '');
+    if (priceString.isEmpty) return 0;
+    
+    final pricePerNight = int.tryParse(priceString) ?? 0;
+    return pricePerNight * dayDiff;
+  }
+
+  Future<void> _makeReservation(
+    DateTime checkInDate,
+    DateTime checkOutDate,
+    int guestCount,
+    String? notes,
+  ) async {
+    if (_property == null) return;
+
+    // Yükleniyor göster
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final bookingService = BookingService();
+      await bookingService.createPropertyBooking(
+        propertyId: _property!.id,
+        startDate: checkInDate.toIso8601String(),
+        endDate: checkOutDate.toIso8601String(),
+        guestCount: guestCount,
+        notes: notes,
+      );
+
+      // Dialog kapat
+      Navigator.pop(context);
+      // Modal kapat
+      Navigator.pop(context);
+
+      // Başarı mesajı göster
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rezervasyon talebiniz gönderildi'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // Dialog kapat
+      Navigator.pop(context);
+      
+      // Hata mesajı göster
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Rezervasyon oluşturulurken bir hata oluştu: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -739,33 +1196,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         ],
                       ),
                       const Spacer(),
-                      ElevatedButton(
-                        onPressed: () {
-                          // Rezervasyon işlemi
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Rezervasyon talebiniz alındı!'),
-                              backgroundColor: Color(0xFFFF5A5F),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text(
-                          'Uygunluğu kontrol et',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      _buildReserveButton(),
                     ],
                   ),
                   const SizedBox(height: 16),

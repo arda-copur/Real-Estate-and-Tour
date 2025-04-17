@@ -19,6 +19,8 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const propertyRoutes = require('./routes/propertyRoutes');
 const experienceRoutes = require('./routes/experienceRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
 
 const app = express();
 
@@ -34,6 +36,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/experiences', experienceRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/bookings', bookingRoutes);
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
