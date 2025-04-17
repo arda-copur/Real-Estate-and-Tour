@@ -85,6 +85,31 @@ Provides smart travel recommendations
 
 Suggests vacation ideas and activities
 
+### ⭐ Review System
+Dual-sided reviews (guest ↔ host)
+
+Rating criteria with multiple dimensions
+
+Moderation queue for quality control
+
+Verified stays requirement
+
+### 🎫 Support Ticket System
+User ticket submission flow
+
+Admin response and resolution tracking
+
+Priority categorization
+
+Status tracking (Open/In Progress/Resolved)
+
+### 📟 Admin Management
+Complete CRUD operations for all entities
+
+
+User management with role-based access
+
+
 ## 🛠️ Technical Stack
 
 ### Frontend (Flutter)
