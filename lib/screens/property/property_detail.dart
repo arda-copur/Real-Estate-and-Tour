@@ -29,12 +29,14 @@ class PropertyDetailScreen extends StatefulWidget {
 class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   final PropertyService _propertyService = PropertyService();
   final UserService _userService = UserService();
+  final BookingService _bookingService = BookingService();
 
   Map<String, dynamic>? _propertyData;
   Property? _property;
   bool _isLoading = true;
   String? _error;
   bool _isFavorite = false;
+  bool _isReserved = false;
 
   @override
   void initState() {
@@ -46,6 +48,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         _checkSavedStatus();
+        _checkReservationStatus();
       }
     });
   }
@@ -220,6 +223,36 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       }
     } catch (e) {
       // Favorileri kontrol ederken hata oluştu - sessizce devam et
+    }
+  }
+
+  // Rezervasyon durumunu kontrol et
+  Future<void> _checkReservationStatus() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.currentUser == null) return;
+
+    try {
+      // Kullanıcının rezervasyonlarını getir
+      final bookings = await _bookingService.getMyBookings();
+      
+      // Bu mülk için aktif bir rezervasyon var mı kontrol et
+      final hasActiveReservation = bookings.any((booking) {
+        // booking bir Map ya da Booking objesi olabilir
+        final Map bookingData = booking is Map ? booking : (booking as Booking).toJson();
+        final String propertyId = bookingData['propertyId'] ?? '';
+        final String status = bookingData['status'] ?? '';
+        
+        return propertyId == widget.propertyId && 
+               (status == 'confirmed' || status == 'pending');
+      });
+      
+      if (mounted) {
+        setState(() {
+          _isReserved = hasActiveReservation;
+        });
+      }
+    } catch (e) {
+      print('Rezervasyon durumu kontrol edilirken hata oluştu: $e');
     }
   }
 
@@ -464,6 +497,32 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       return Container();
     }
 
+    // Zaten rezerve edildiyse, "Rezerv edildi" düğmesini göster
+    if (_isReserved) {
+      return ElevatedButton(
+        onPressed: null, // Tıklanamaz
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 12,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          backgroundColor: Colors.grey[400],
+        ),
+        child: const Text(
+          'Rezerv Edildi',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+
+    // Normal rezervasyon düğmesini göster
     return ElevatedButton(
       onPressed: _showBookingModal,
       style: ElevatedButton.styleFrom(
@@ -854,6 +913,11 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
           backgroundColor: Colors.green,
         ),
       );
+
+      // Rezervasyon durumunu güncelle
+      setState(() {
+        _isReserved = true;
+      });
     } catch (e) {
       // Dialog kapat
       Navigator.pop(context);
