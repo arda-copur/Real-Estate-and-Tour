@@ -1,5 +1,5 @@
 ## 📌 Overview
-TravelEstate is a dual-purpose platform that allows users to list rental properties and travel/tour activities. Built with Flutter for the frontend, Node.js for the backend, and MongoDB for the database, it offers a comprehensive solution for property rentals and travel experiences.
+Real Estate and Tour is a dual-purpose platform that allows users to list rental properties and travel/tour activities. Built with Flutter for the frontend, Node.js for the backend, and MongoDB for the database, it offers a comprehensive solution for property rentals and travel experiences.
 
 ## 📱 Screenshots
 
